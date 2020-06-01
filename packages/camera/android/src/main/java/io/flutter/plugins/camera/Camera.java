@@ -509,6 +509,14 @@ public class Camera {
        });
   }
 
+  public void pausePreviewWithBarcodeScanning() {
+    barcodeScanner.pause();
+  }
+
+  public void resumePreviewWithBarcodeScanning() {
+    barcodeScanner.resume();
+  }
+
   private void setBarcodeScanningImageAvailableListener(final EventChannel.EventSink barcodeScanningSink) {
     barcodeScanner.setSink(barcodeScanningSink);
     barcodeScanningReader.setOnImageAvailableListener(
