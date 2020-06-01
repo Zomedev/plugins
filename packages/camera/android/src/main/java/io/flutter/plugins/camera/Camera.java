@@ -28,6 +28,7 @@ import android.view.Surface;
 import androidx.annotation.NonNull;
 import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.MethodChannel.Result;
+import io.flutter.plugins.camera.barcodes.BarcodeScanner;
 import io.flutter.view.TextureRegistry.SurfaceTextureEntry;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -38,6 +39,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import android.util.Log;
 
 public class Camera {
   private final SurfaceTextureEntry flutterTexture;
@@ -54,6 +57,8 @@ public class Camera {
   private CameraCaptureSession cameraCaptureSession;
   private ImageReader pictureImageReader;
   private ImageReader imageStreamReader;
+  private ImageReader barcodeScanningReader;
+  private BarcodeScanner barcodeScanner;
   private DartMessenger dartMessenger;
   private CaptureRequest.Builder captureRequestBuilder;
   private MediaRecorder mediaRecorder;
@@ -114,6 +119,8 @@ public class Camera {
         CameraUtils.getBestAvailableCamcorderProfileForResolutionPreset(cameraName, preset);
     captureSize = new Size(recordingProfile.videoFrameWidth, recordingProfile.videoFrameHeight);
     previewSize = computeBestPreviewSize(cameraName, preset);
+
+    barcodeScanner = new BarcodeScanner(activity);
   }
 
   private void prepareMediaRecorder(String outputFilePath) throws IOException {
@@ -149,6 +156,11 @@ public class Camera {
     imageStreamReader =
         ImageReader.newInstance(
             previewSize.getWidth(), previewSize.getHeight(), ImageFormat.YUV_420_888, 2);
+
+    // Use to scan for barcodes
+    barcodeScanningReader =
+       ImageReader.newInstance(
+          previewSize.getWidth(), previewSize.getHeight(), ImageFormat.YUV_420_888, 2);
 
     cameraManager.openCamera(
         cameraName,
@@ -421,6 +433,8 @@ public class Camera {
   }
 
   public void startPreview() throws CameraAccessException {
+    barcodeScanner.stop();
+
     createCaptureSession(CameraDevice.TEMPLATE_PREVIEW, pictureImageReader.getSurface());
   }
 
@@ -475,6 +489,40 @@ public class Camera {
         null);
   }
 
+  public void startPreviewWithBarcodeScanning(EventChannel barcodeScannerChannel)
+     throws CameraAccessException {
+
+    createCaptureSession(CameraDevice.TEMPLATE_RECORD, barcodeScanningReader.getSurface());
+
+    barcodeScanner.start();
+    barcodeScannerChannel.setStreamHandler(
+       new EventChannel.StreamHandler() {
+         @Override
+         public void onListen(Object o, EventChannel.EventSink barcodeScanningSink) {
+           setBarcodeScanningImageAvailableListener(barcodeScanningSink);
+         }
+
+         @Override
+         public void onCancel(Object o) {
+           barcodeScanningReader.setOnImageAvailableListener(null, null);
+         }
+       });
+  }
+
+  private void setBarcodeScanningImageAvailableListener(final EventChannel.EventSink barcodeScanningSink) {
+    barcodeScanner.setSink(barcodeScanningSink);
+    barcodeScanningReader.setOnImageAvailableListener(
+       reader -> {
+         Image img = reader.acquireLatestImage();
+         if (img == null) return;
+
+         barcodeScanner.submitImage(img, getMediaOrientation());
+
+         img.close();
+       },
+       null);
+  }
+
   private void closeCaptureSession() {
     if (cameraCaptureSession != null) {
       cameraCaptureSession.close();
@@ -497,6 +545,15 @@ public class Camera {
       imageStreamReader.close();
       imageStreamReader = null;
     }
+    if (barcodeScanningReader != null) {
+      barcodeScanningReader.close();
+      barcodeScanningReader = null;
+    }
+
+    if( barcodeScanner != null) {
+      barcodeScanner.stop();
+    }
+
     if (mediaRecorder != null) {
       mediaRecorder.reset();
       mediaRecorder.release();

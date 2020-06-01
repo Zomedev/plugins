@@ -20,6 +20,7 @@ final class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
   private final TextureRegistry textureRegistry;
   private final MethodChannel methodChannel;
   private final EventChannel imageStreamChannel;
+  private final EventChannel barcodeScanningChannel;
   private @Nullable Camera camera;
 
   MethodCallHandlerImpl(
@@ -36,6 +37,7 @@ final class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
 
     methodChannel = new MethodChannel(messenger, "plugins.flutter.io/camera");
     imageStreamChannel = new EventChannel(messenger, "plugins.flutter.io/camera/imageStream");
+    barcodeScanningChannel = new EventChannel(messenger, "plugins.flutter.io/camera/barcodeScanning");
     methodChannel.setMethodCallHandler(this);
   }
 
@@ -123,6 +125,26 @@ final class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
           }
           break;
         }
+      case "startBarcodeScanning":
+      {
+        try {
+          camera.startPreviewWithBarcodeScanning(barcodeScanningChannel);
+          result.success(null);
+        } catch (Exception e) {
+          handleException(e, result);
+        }
+        break;
+      }
+      case "stopBarcodeScanning":
+      {
+        try {
+          camera.startPreview();
+          result.success(null);
+        } catch (Exception e) {
+          handleException(e, result);
+        }
+        break;
+      }
       case "dispose":
         {
           if (camera != null) {

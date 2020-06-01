@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 part 'camera_image.dart';
+part 'barcode_scan.dart';
 
 final MethodChannel _channel = const MethodChannel('plugins.flutter.io/camera');
 
@@ -40,6 +41,7 @@ enum ResolutionPreset {
 
 // ignore: inference_failure_on_function_return_type
 typedef onLatestImageAvailable = Function(CameraImage image);
+typedef onBarcodeAvailable = Function(BarcodeScan barcode);
 
 /// Returns the resolution preset as a String.
 String serializeResolutionPreset(ResolutionPreset resolutionPreset) {
@@ -158,6 +160,7 @@ class CameraValue {
     this.isRecordingVideo,
     this.isTakingPicture,
     this.isStreamingImages,
+    this.isScanningBarcodes,
     bool isRecordingPaused,
   }) : _isRecordingPaused = isRecordingPaused;
 
@@ -167,6 +170,7 @@ class CameraValue {
           isRecordingVideo: false,
           isTakingPicture: false,
           isStreamingImages: false,
+          isScanningBarcodes: false,
           isRecordingPaused: false,
         );
 
@@ -181,6 +185,9 @@ class CameraValue {
 
   /// True when images from the camera are being streamed.
   final bool isStreamingImages;
+
+  /// True when barcodes from the camera are being scanned.
+  final bool isScanningBarcodes;
 
   final bool _isRecordingPaused;
 
@@ -206,6 +213,7 @@ class CameraValue {
     bool isRecordingVideo,
     bool isTakingPicture,
     bool isStreamingImages,
+    bool isScanningBarcodes,
     String errorDescription,
     Size previewSize,
     bool isRecordingPaused,
@@ -217,6 +225,7 @@ class CameraValue {
       isRecordingVideo: isRecordingVideo ?? this.isRecordingVideo,
       isTakingPicture: isTakingPicture ?? this.isTakingPicture,
       isStreamingImages: isStreamingImages ?? this.isStreamingImages,
+      isScanningBarcodes: isScanningBarcodes ?? this.isScanningBarcodes,
       isRecordingPaused: isRecordingPaused ?? _isRecordingPaused,
     );
   }
@@ -229,7 +238,8 @@ class CameraValue {
         'isInitialized: $isInitialized, '
         'errorDescription: $errorDescription, '
         'previewSize: $previewSize, '
-        'isStreamingImages: $isStreamingImages)';
+        'isStreamingImages: $isStreamingImages, '
+        'isScanningBarcodes: $isScanningBarcodes)';
   }
 }
 
@@ -257,6 +267,7 @@ class CameraController extends ValueNotifier<CameraValue> {
   bool _isDisposed = false;
   StreamSubscription<dynamic> _eventSubscription;
   StreamSubscription<dynamic> _imageStreamSubscription;
+  StreamSubscription<dynamic> _barcodeScanningSubscription;
   Completer<void> _creatingCompleter;
 
   /// Initializes the camera on the device.
@@ -375,8 +386,8 @@ class CameraController extends ValueNotifier<CameraValue> {
   /// have significant frame rate drops for [CameraPreview] on lower end
   /// devices.
   ///
-  /// Throws a [CameraException] if image streaming or video recording has
-  /// already started.
+  /// Throws a [CameraException] if image streaming, barcode scanning or video
+  /// recording has already started.
   // TODO(bmparr): Add settings for resolution and fps.
   Future<void> startImageStream(onLatestImageAvailable onAvailable) async {
     if (!value.isInitialized || _isDisposed) {
@@ -389,6 +400,12 @@ class CameraController extends ValueNotifier<CameraValue> {
       throw CameraException(
         'A video recording is already started.',
         'startImageStream was called while a video is being recorded.',
+      );
+    }
+    if (value.isScanningBarcodes) {
+      throw CameraException(
+        'A camera has started scanning barcodes.',
+        'startBarcodeScanning was called while a camera was streaming images.',
       );
     }
     if (value.isStreamingImages) {
@@ -417,7 +434,7 @@ class CameraController extends ValueNotifier<CameraValue> {
   /// Stop streaming images from platform camera.
   ///
   /// Throws a [CameraException] if image streaming was not started or video
-  /// recording was started.
+  /// recording or barcode scanning was started.
   Future<void> stopImageStream() async {
     if (!value.isInitialized || _isDisposed) {
       throw CameraException(
@@ -429,6 +446,12 @@ class CameraController extends ValueNotifier<CameraValue> {
       throw CameraException(
         'A video recording is already started.',
         'stopImageStream was called while a video is being recorded.',
+      );
+    }
+    if (value.isScanningBarcodes) {
+      throw CameraException(
+        'Barcode scanning is already started.',
+        'stopImageStream was called while scanning barcodes.',
       );
     }
     if (!value.isStreamingImages) {
@@ -447,6 +470,102 @@ class CameraController extends ValueNotifier<CameraValue> {
 
     await _imageStreamSubscription.cancel();
     _imageStreamSubscription = null;
+  }
+
+  /// Start scanning barcodes from platform camera.
+  ///
+  /// Settings for scanning barcodes on iOS and Android is set to always use the
+  /// latest image available from the camera and will drop all other images.
+  ///
+  /// When running continuously with [CameraPreview] widget, this function runs
+  /// best with [ResolutionPreset.low]. Running on [ResolutionPreset.high] can
+  /// have significant frame rate drops for [CameraPreview] on lower end
+  /// devices.
+  ///
+  /// Throws a [CameraException] if image streaming, barcode scanning  or video
+  /// recording has already started.
+  // TODO(bmparr): Add settings for resolution and fps.
+  Future<void> startBarcodeScanning(onBarcodeAvailable onAvailable) async {
+    if (!value.isInitialized || _isDisposed) {
+      throw CameraException(
+        'Uninitialized CameraController',
+        'startBarcodeScanning was called on uninitialized CameraController.',
+      );
+    }
+    if (value.isRecordingVideo) {
+      throw CameraException(
+        'A video recording is already started.',
+        'startBarcodeScanning was called while a video is being recorded.',
+      );
+    }
+    if (value.isStreamingImages) {
+      throw CameraException(
+        'A camera has started streaming images.',
+        'startBarcodeScanning was called while a camera was streaming images.',
+      );
+    }
+    if (value.isScanningBarcodes) {
+      throw CameraException(
+        'A camera has started scanning barcodes.',
+        'startBarcodeScanning was called while a camera was scanning barcodes.',
+      );
+    }
+
+    try {
+      await _channel.invokeMethod<void>('startBarcodeScanning');
+      value = value.copyWith(isScanningBarcodes: true);
+    } on PlatformException catch (e) {
+      throw CameraException(e.code, e.message);
+    }
+    const EventChannel cameraEventChannel =
+    EventChannel('plugins.flutter.io/camera/barcodeScanning');
+    _barcodeScanningSubscription =
+        cameraEventChannel.receiveBroadcastStream().listen(
+              (dynamic barcodeData) {
+            onAvailable(BarcodeScan._fromPlatformData(barcodeData));
+          },
+        );
+  }
+
+  /// Stop scanning barcodes platform camera.
+  ///
+  /// Throws a [CameraException] if barcode scanning was not started or video
+  /// recording or image streaming was started.
+  Future<void> stopBarcodeScanning() async {
+    if (!value.isInitialized || _isDisposed) {
+      throw CameraException(
+        'Uninitialized CameraController',
+        'stopBarcodeScans was called on uninitialized CameraController.',
+      );
+    }
+    if (value.isRecordingVideo) {
+      throw CameraException(
+        'A video recording is already started.',
+        'stopBarcodeScans was called while a video is being recorded.',
+      );
+    }
+    if (value.isStreamingImages) {
+      throw CameraException(
+        'Image streaming is already started.',
+        'stopBarcodeScans was called while streaming images.',
+      );
+    }
+    if (!value.isScanningBarcodes) {
+      throw CameraException(
+        'No camera is scanning barcodes',
+        'stopBarcodeScanning was called when no camera is scanning barcodes.',
+      );
+    }
+
+    try {
+      value = value.copyWith(isScanningBarcodes: false);
+      await _channel.invokeMethod<void>('stopBarcodeScanning');
+    } on PlatformException catch (e) {
+      throw CameraException(e.code, e.message);
+    }
+
+    await _barcodeScanningSubscription.cancel();
+    _barcodeScanningSubscription = null;
   }
 
   /// Start a video recording and save the file to [path].
@@ -476,6 +595,12 @@ class CameraController extends ValueNotifier<CameraValue> {
       throw CameraException(
         'A camera has started streaming images.',
         'startVideoRecording was called while a camera was streaming images.',
+      );
+    }
+    if (value.isScanningBarcodes) {
+      throw CameraException(
+        'A camera has started scanning barcodes.',
+        'startVideoRecording was called while a camera was scanning barcodes.',
       );
     }
 
