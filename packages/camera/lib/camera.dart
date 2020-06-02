@@ -527,56 +527,6 @@ class CameraController extends ValueNotifier<CameraValue> {
         );
   }
 
-  /// Pause scanning barcodes platform camera.
-  ///
-  /// Throws a [CameraException] if barcode scanning was not started
-  Future<void> pauseBarcodeScanning() async {
-    if (!value.isInitialized || _isDisposed) {
-      throw CameraException(
-        'Uninitialized CameraController',
-        'pauseBarcodeScanning was called on uninitialized CameraController.',
-      );
-    }
-    if (!value.isScanningBarcodes) {
-      throw CameraException(
-        'No camera is scanning barcodes',
-        'pauseBarcodeScanning was called when no camera is scanning barcodes.',
-      );
-    }
-
-    try {
-//      value = value.copyWith(isScanningBarcodes: false);
-      await _channel.invokeMethod<void>('pauseBarcodeScanning');
-    } on PlatformException catch (e) {
-      throw CameraException(e.code, e.message);
-    }
-  }
-
-  /// Resume scanning barcodes platform camera.
-  ///
-  /// Throws a [CameraException] if barcode scanning was not started
-  Future<void> resumeBarcodeScanning() async {
-    if (!value.isInitialized || _isDisposed) {
-      throw CameraException(
-        'Uninitialized CameraController',
-        'resumeBarcodeScanning was called on uninitialized CameraController.',
-      );
-    }
-    if (!value.isScanningBarcodes) {
-      throw CameraException(
-        'No camera is scanning barcodes',
-        'resumeBarcodeScanning was called when no camera is scanning barcodes.',
-      );
-    }
-
-    try {
-//      value = value.copyWith(isScanningBarcodes: false);
-      await _channel.invokeMethod<void>('resumeBarcodeScanning');
-    } on PlatformException catch (e) {
-      throw CameraException(e.code, e.message);
-    }
-  }
-
   /// Stop scanning barcodes platform camera.
   ///
   /// Throws a [CameraException] if barcode scanning was not started or video

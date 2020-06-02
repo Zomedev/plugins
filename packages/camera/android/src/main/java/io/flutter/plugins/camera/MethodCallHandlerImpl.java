@@ -132,26 +132,6 @@ final class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
         }
         break;
       }
-      case "pauseBarcodeScanning":
-      {
-        try {
-          camera.pausePreviewWithBarcodeScanning();
-          result.success(null);
-        } catch (Exception e) {
-          handleException(e, result);
-        }
-        break;
-      }
-      case "resumeBarcodeScanning":
-      {
-        try {
-          camera.resumePreviewWithBarcodeScanning();
-          result.success(null);
-        } catch (Exception e) {
-          handleException(e, result);
-        }
-        break;
-      }
       case "stopBarcodeScanning":
       {
         try {
