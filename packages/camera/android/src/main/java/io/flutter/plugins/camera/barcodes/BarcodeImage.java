@@ -43,25 +43,25 @@ class BarcodeImage {
     return true;
   }
 
-  public BarcodeImage scaledHalf() {
+  public void scaledFrom(BarcodeImage rhs) {
     final int FACTOR = 2;
 
-    BarcodeImage result = new BarcodeImage();
+    if(xSize != rhs.xSize / FACTOR || ySize != rhs.ySize / FACTOR) {
+      xSize = rhs.xSize / FACTOR;
+      ySize = rhs.ySize / FACTOR;
 
-    result.xSize = xSize / FACTOR;
-    result.ySize = ySize / FACTOR;
-    result.frameId = frameId;
-    result.frameRotation = frameRotation;
-    result.timestamp = timestamp;
-
-    result.bytesCount = xSize / FACTOR * ySize / FACTOR * 3 / 2;
-    result.bytes = new byte[result.bytesCount];
-    for(int y = 0, index = 0; y < ySize; y += FACTOR) {
-      for(int x = 0; x < xSize; x += FACTOR, index++) {
-        result.bytes[index] = bytes[y * xSize + x];
-      }
+      bytesCount = xSize * ySize * 3 / 2;
+      bytes = new byte[bytesCount];
     }
 
-    return result;
+    frameId = rhs.frameId;
+    frameRotation = rhs.frameRotation;
+    timestamp = rhs.timestamp;
+
+    for(int y = 0, index = 0; y < rhs.ySize; y += FACTOR) {
+      for(int x = 0; x < rhs.xSize; x += FACTOR, index++) {
+        bytes[index] = rhs.bytes[y * rhs.xSize + x];
+      }
+    }
   }
 }

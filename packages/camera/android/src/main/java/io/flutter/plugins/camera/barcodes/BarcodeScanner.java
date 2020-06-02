@@ -36,6 +36,7 @@ public class BarcodeScanner {
   private long pendingTimestamp;
   private BarcodeImage pendingImage = new BarcodeImage();
   private BarcodeImage processingImage = new BarcodeImage();
+  private BarcodeImage scaledImage = new BarcodeImage();
 
   private BarcodeDetector detector;
   private BarcodeTrackerFactory tracker;
@@ -184,7 +185,8 @@ public class BarcodeScanner {
         }
 
         // Build the frame
-        BarcodeImage scaledImage = processingImage.scaledHalf(); // TODO: Eliminate alloc.
+        scaledImage.scaledFrom(processingImage);
+//        BarcodeImage scaledImage = processingImage.scaledHalf(); // TODO: Eliminate alloc.
 
         Frame frame = new Frame.Builder()
            .setImageData(ByteBuffer.wrap(scaledImage.bytes), scaledImage.xSize, scaledImage.ySize, ImageFormat.NV21)
