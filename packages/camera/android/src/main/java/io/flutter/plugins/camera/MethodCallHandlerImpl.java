@@ -108,8 +108,7 @@ final class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
       case "startImageStream":
         {
           try {
-            camera.startPreviewWithImageStream(imageStreamChannel);
-            result.success(null);
+            camera.startPreviewWithImageStream(imageStreamChannel, result);
           } catch (Exception e) {
             handleException(e, result);
           }
@@ -118,8 +117,7 @@ final class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
       case "stopImageStream":
         {
           try {
-            camera.startPreview();
-            result.success(null);
+            camera.startPreview(result, null);
           } catch (Exception e) {
             handleException(e, result);
           }
@@ -128,8 +126,7 @@ final class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
       case "startBarcodeScanning":
       {
         try {
-          camera.startPreviewWithBarcodeScanning(barcodeScanningChannel);
-          result.success(null);
+          camera.startPreviewWithBarcodeScanning(barcodeScanningChannel, result);
         } catch (Exception e) {
           handleException(e, result);
         }
@@ -158,8 +155,7 @@ final class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
       case "stopBarcodeScanning":
       {
         try {
-          camera.startPreview();
-          result.success(null);
+          camera.startPreview(result, null);
         } catch (Exception e) {
           handleException(e, result);
         }

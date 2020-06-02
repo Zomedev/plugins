@@ -169,17 +169,17 @@ public class Camera {
           public void onOpened(@NonNull CameraDevice device) {
             cameraDevice = device;
             try {
-              startPreview();
+              Map<String, Object> reply = new HashMap<>();
+              reply.put("textureId", flutterTexture.id());
+              reply.put("previewWidth", previewSize.getWidth());
+              reply.put("previewHeight", previewSize.getHeight());
+
+              startPreview(result, reply);
             } catch (CameraAccessException e) {
               result.error("CameraAccess", e.getMessage(), null);
               close();
               return;
             }
-            Map<String, Object> reply = new HashMap<>();
-            reply.put("textureId", flutterTexture.id());
-            reply.put("previewWidth", previewSize.getWidth());
-            reply.put("previewHeight", previewSize.getHeight());
-            result.success(reply);
           }
 
           @Override
@@ -290,12 +290,13 @@ public class Camera {
     }
   }
 
-  private void createCaptureSession(int templateType, Surface... surfaces)
+  private void createCaptureSession(final Result result, final Map<String, Object> resultSuccess, int templateType, Surface... surfaces)
       throws CameraAccessException {
-    createCaptureSession(templateType, null, surfaces);
+    createCaptureSession(result, resultSuccess, templateType, null, surfaces);
   }
 
   private void createCaptureSession(
+      final Result result, final Map<String, Object> resultSuccess,
       int templateType, Runnable onSuccessCallback, Surface... surfaces)
       throws CameraAccessException {
     // Close any existing capture session.
@@ -327,7 +328,9 @@ public class Camera {
               if (cameraDevice == null) {
                 dartMessenger.send(
                     DartMessenger.EventType.ERROR, "The camera was closed during configuration.");
-                return;
+
+                if(result != null)
+                  result.error("createCaptureSession", "no camera device", null);
               }
               cameraCaptureSession = session;
               captureRequestBuilder.set(
@@ -336,8 +339,14 @@ public class Camera {
               if (onSuccessCallback != null) {
                 onSuccessCallback.run();
               }
+
+              if(result != null)
+                result.success(resultSuccess);
             } catch (CameraAccessException | IllegalStateException | IllegalArgumentException e) {
               dartMessenger.send(DartMessenger.EventType.ERROR, e.getMessage());
+
+              if(result != null)
+                result.error("createCaptureSession", e.getMessage(), null);
             }
           }
 
@@ -364,7 +373,7 @@ public class Camera {
     try {
       prepareMediaRecorder(filePath);
       recordingVideo = true;
-      createCaptureSession(
+      createCaptureSession(result, null,
           CameraDevice.TEMPLATE_RECORD, () -> mediaRecorder.start(), mediaRecorder.getSurface());
       result.success(null);
     } catch (CameraAccessException | IOException e) {
@@ -382,8 +391,7 @@ public class Camera {
       recordingVideo = false;
       mediaRecorder.stop();
       mediaRecorder.reset();
-      startPreview();
-      result.success(null);
+      startPreview(result, null);
     } catch (CameraAccessException | IllegalStateException e) {
       result.error("videoRecordingFailed", e.getMessage(), null);
     }
@@ -432,15 +440,15 @@ public class Camera {
     result.success(null);
   }
 
-  public void startPreview() throws CameraAccessException {
+  public void startPreview(final Result result, final Map<String, Object> resultSuccess) throws CameraAccessException {
     barcodeScanner.stop();
 
-    createCaptureSession(CameraDevice.TEMPLATE_PREVIEW, pictureImageReader.getSurface());
+    createCaptureSession(result, resultSuccess, CameraDevice.TEMPLATE_PREVIEW, pictureImageReader.getSurface());
   }
 
-  public void startPreviewWithImageStream(EventChannel imageStreamChannel)
+  public void startPreviewWithImageStream(EventChannel imageStreamChannel, final Result result)
       throws CameraAccessException {
-    createCaptureSession(CameraDevice.TEMPLATE_RECORD, imageStreamReader.getSurface());
+    createCaptureSession(result, null, CameraDevice.TEMPLATE_RECORD, imageStreamReader.getSurface());
 
     imageStreamChannel.setStreamHandler(
         new EventChannel.StreamHandler() {
@@ -489,10 +497,10 @@ public class Camera {
         null);
   }
 
-  public void startPreviewWithBarcodeScanning(EventChannel barcodeScannerChannel)
+  public void startPreviewWithBarcodeScanning(EventChannel barcodeScannerChannel, final Result result)
      throws CameraAccessException {
 
-    createCaptureSession(CameraDevice.TEMPLATE_RECORD, barcodeScanningReader.getSurface());
+    createCaptureSession(result, null, CameraDevice.TEMPLATE_RECORD, barcodeScanningReader.getSurface());
 
     barcodeScanner.start();
     barcodeScannerChannel.setStreamHandler(
