@@ -44,6 +44,57 @@ static FlutterError *getFlutterError(NSError *error) {
 }
 @end
 
+@interface FLTBarcodeScanningHandler : NSObject <FlutterStreamHandler>
+@property FlutterEventSink eventSink;
+@end
+
+@implementation FLTBarcodeScanningHandler
+
+- (FlutterError *_Nullable)onCancelWithArguments:(id _Nullable)arguments {
+  _eventSink = nil;
+  return nil;
+}
+
+- (FlutterError *_Nullable)onListenWithArguments:(id _Nullable)arguments
+                                       eventSink:(nonnull FlutterEventSink)events {
+  _eventSink = events;
+  return nil;
+}
+@end
+
+@interface BarcodePair : NSObject
+@property int activeId;
+@property NSString* value;
+
+-(id)initWithValue:(NSString*)value;
+-(BOOL)isEqual:(id)object;
+@end
+
+@implementation BarcodePair {
+  
+}
+
+static int _nextActiveId = 0;
+-(id)initWithValue:(NSString*)value {
+  if(self = [super init]) {
+    self.activeId = _nextActiveId++;
+    self.value = value;
+    return self;
+  } else
+    return nil;
+}
+
+-(BOOL)isEqual:(id)object {
+  if(object == self)
+    return YES;
+  if([object isKindOfClass:[NSString class]]) {
+    return self.value == (NSString*)object;
+  }
+  
+  return NO;
+}
+@end
+
 @implementation FLTSavePhotoDelegate {
   /// Used to keep the delegate alive until didFinishProcessingPhotoSampleBuffer.
   FLTSavePhotoDelegate *selfReference;
@@ -158,17 +209,21 @@ static ResolutionPreset getResolutionPresetForString(NSString *preset) {
 @interface FLTCam : NSObject <FlutterTexture,
                               AVCaptureVideoDataOutputSampleBufferDelegate,
                               AVCaptureAudioDataOutputSampleBufferDelegate,
+                              AVCaptureMetadataOutputObjectsDelegate,
                               FlutterStreamHandler>
 @property(readonly, nonatomic) int64_t textureId;
 @property(nonatomic, copy) void (^onFrameAvailable)();
 @property BOOL enableAudio;
 @property(nonatomic) FlutterEventChannel *eventChannel;
 @property(nonatomic) FLTImageStreamHandler *imageStreamHandler;
+@property(nonatomic) FLTBarcodeScanningHandler *barcodeScanningHandler;
 @property(nonatomic) FlutterEventSink eventSink;
 @property(readonly, nonatomic) AVCaptureSession *captureSession;
 @property(readonly, nonatomic) AVCaptureDevice *captureDevice;
 @property(readonly, nonatomic) AVCapturePhotoOutput *capturePhotoOutput;
 @property(readonly, nonatomic) AVCaptureVideoDataOutput *captureVideoOutput;
+@property(readonly, nonatomic) AVCaptureMetadataOutput* captureMetadataOutput;
+@property(readonly, nonatomic) dispatch_queue_t captureMetadataQueue;
 @property(readonly, nonatomic) AVCaptureInput *captureVideoInput;
 @property(readonly) CVPixelBufferRef volatile latestPixelBuffer;
 @property(readonly, nonatomic) CGSize previewSize;
@@ -185,6 +240,8 @@ static ResolutionPreset getResolutionPresetForString(NSString *preset) {
 @property(assign, nonatomic) BOOL audioIsDisconnected;
 @property(assign, nonatomic) BOOL isAudioSetup;
 @property(assign, nonatomic) BOOL isStreamingImages;
+@property(assign, nonatomic) BOOL isScanningBarcodes;
+@property(strong, nonatomic) NSMutableArray<BarcodePair*>* activeBarcodes;
 @property(assign, nonatomic) ResolutionPreset resolutionPreset;
 @property(assign, nonatomic) CMTime lastVideoSampleTime;
 @property(assign, nonatomic) CMTime lastAudioSampleTime;
@@ -259,6 +316,10 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
   [_captureSession addOutput:_capturePhotoOutput];
   _motionManager = [[CMMotionManager alloc] init];
   [_motionManager startAccelerometerUpdates];
+  
+  _activeBarcodes = [NSMutableArray array];
+  _captureMetadataOutput = [AVCaptureMetadataOutput new];
+  _captureMetadataQueue = dispatch_queue_create("captureMetadataQueue", nil);
 
   [self setCaptureSessionPreset:_resolutionPreset];
   return self;
@@ -495,6 +556,64 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
   }
 }
 
+-(void)enableBarcodeScanning {
+  if([_captureSession canAddOutput:_captureMetadataOutput]) {
+    [_captureSession addOutput:_captureMetadataOutput];
+    NSArray<AVMetadataObjectType>* types = [_captureMetadataOutput availableMetadataObjectTypes];
+    
+    [_captureMetadataOutput setMetadataObjectsDelegate:self queue:_captureMetadataQueue];
+    [_captureMetadataOutput setMetadataObjectTypes:[NSArray arrayWithObject:AVMetadataObjectTypeQRCode]];
+  }
+}
+
+-(void)disableBarcodeScanning {
+  [_captureSession removeOutput:_captureMetadataOutput];
+}
+
+#pragma mark - AVCaptureMetadataOutputObjectsDelegate
+
+-(void)captureOutput:(AVCaptureOutput *)output didOutputMetadataObjects:(NSArray<__kindof AVMetadataObject *> *)metadataObjects fromConnection:(AVCaptureConnection *)connection{
+  if(_barcodeScanningHandler == nil || _barcodeScanningHandler.eventSink == nil)
+    return;
+  
+  if(metadataObjects == nil)
+    return;
+  
+  NSMutableArray<BarcodePair*>* removedBarcodes = [NSMutableArray arrayWithArray:_activeBarcodes];
+  for(AVMetadataMachineReadableCodeObject* metadata in metadataObjects) {
+
+    size_t existingIndex = [_activeBarcodes indexOfObjectPassingTest:^BOOL(BarcodePair * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+      *stop = [obj.value isEqualToString:[metadata stringValue]];
+      return stop;
+    }];
+    
+    if(existingIndex != NSNotFound) {
+      [removedBarcodes removeObject:_activeBarcodes[existingIndex]];
+      continue;
+    }
+    
+    BarcodePair* pair = [[BarcodePair alloc] initWithValue: [metadata stringValue]];
+    [_activeBarcodes addObject:pair];
+    
+    NSMutableDictionary *barcodeEvent = [NSMutableDictionary dictionary];
+    barcodeEvent[@"id"] = [NSNumber numberWithInt:pair.activeId];
+    barcodeEvent[@"value"] = pair.value;
+
+    _barcodeScanningHandler.eventSink(barcodeEvent);
+  }
+  
+  for(BarcodePair* removedBarcode in removedBarcodes) {
+    
+    NSMutableDictionary *barcodeEvent = [NSMutableDictionary dictionary];
+    barcodeEvent[@"id"] = [NSNumber numberWithInt:removedBarcode.activeId];
+    barcodeEvent[@"value"] = nil;
+
+    _barcodeScanningHandler.eventSink(barcodeEvent);
+    
+    [_activeBarcodes removeObject:removedBarcode];
+  }
+}
+
 - (CMSampleBufferRef)adjustTime:(CMSampleBufferRef)sample by:(CMTime)offset {
   CMItemCount count;
   CMSampleBufferGetSampleTimingInfoArray(sample, 0, nil, &count);
@@ -560,6 +679,7 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
   for (AVCaptureOutput *output in [_captureSession outputs]) {
     [_captureSession removeOutput:output];
   }
+  [_activeBarcodes removeAllObjects];
 }
 
 - (void)dealloc {
@@ -666,6 +786,34 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
   } else {
     _eventSink(
         @{@"event" : @"error", @"errorDescription" : @"Images from camera are not streaming!"});
+  }
+}
+
+- (void)startBarcodeScanningWithMessenger:(NSObject<FlutterBinaryMessenger> *)messenger {
+  if (!_isScanningBarcodes) {
+    FlutterEventChannel *eventChannel =
+        [FlutterEventChannel eventChannelWithName:@"plugins.flutter.io/camera/barcodeScanning"
+                                  binaryMessenger:messenger];
+
+    _barcodeScanningHandler = [[FLTBarcodeScanningHandler alloc] init];
+    [eventChannel setStreamHandler:_barcodeScanningHandler];
+    
+    [self enableBarcodeScanning];
+    _isScanningBarcodes = YES;
+  } else {
+    _eventSink(
+        @{@"event" : @"error", @"errorDescription" : @"Camera already scanning barcodes!"});
+  }
+}
+
+- (void)stopBarcodeScanning {
+  if (_isScanningBarcodes) {
+    [self disableBarcodeScanning];
+    _isScanningBarcodes = NO;
+    _barcodeScanningHandler = nil;
+  } else {
+    _eventSink(
+        @{@"event" : @"error", @"errorDescription" : @"Camera not scanning barcodes!"});
   }
 }
 
@@ -870,6 +1018,12 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
     result(nil);
   } else if ([@"stopImageStream" isEqualToString:call.method]) {
     [_camera stopImageStream];
+    result(nil);
+  } else if ([@"startBarcodeScanning" isEqualToString:call.method]) {
+    [_camera startBarcodeScanningWithMessenger:_messenger];
+    result(nil);
+  } else if ([@"stopBarcodeScanning" isEqualToString:call.method]) {
+    [_camera stopBarcodeScanning];
     result(nil);
   } else if ([@"pauseVideoRecording" isEqualToString:call.method]) {
     [_camera pauseVideoRecording];
