@@ -185,8 +185,8 @@ public class BarcodeScanner {
         }
 
         // Build the frame
-        scaledImage.scaledFrom(processingImage);
-//        BarcodeImage scaledImage = processingImage.scaledHalf(); // TODO: Eliminate alloc.
+        scaledImage = processingImage;
+//        scaledImage.scaledFrom(processingImage);
 
         Frame frame = new Frame.Builder()
            .setImageData(ByteBuffer.wrap(scaledImage.bytes), scaledImage.xSize, scaledImage.ySize, ImageFormat.NV21)
