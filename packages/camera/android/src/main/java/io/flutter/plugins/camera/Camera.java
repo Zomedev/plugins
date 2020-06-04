@@ -500,7 +500,7 @@ public class Camera {
   public void startPreviewWithBarcodeScanning(EventChannel barcodeScannerChannel, final Result result)
      throws CameraAccessException {
 
-    createCaptureSession(result, null, CameraDevice.TEMPLATE_RECORD, barcodeScanningReader.getSurface());
+    createCaptureSession(result, null, CameraDevice.TEMPLATE_RECORD, barcodeScanningReader.getSurface(), pictureImageReader.getSurface());
 
     barcodeScanner.start();
     barcodeScannerChannel.setStreamHandler(
