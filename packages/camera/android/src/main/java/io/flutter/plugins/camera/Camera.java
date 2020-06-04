@@ -290,14 +290,14 @@ public class Camera {
     }
   }
 
-  private void createCaptureSession(final Result result, final Map<String, Object> resultSuccess, int templateType, Surface... surfaces)
+  private void createCaptureSession(final Result result, final Map<String, Object> resultSuccess, int templateType, Surface targetSurface, Surface otherSurface)
       throws CameraAccessException {
-    createCaptureSession(result, resultSuccess, templateType, null, surfaces);
+    createCaptureSession(result, resultSuccess, templateType, null, targetSurface, otherSurface);
   }
 
   private void createCaptureSession(
       final Result result, final Map<String, Object> resultSuccess,
-      int templateType, Runnable onSuccessCallback, Surface... surfaces)
+      int templateType, Runnable onSuccessCallback, Surface targetSurface, Surface otherSurface)
       throws CameraAccessException {
     // Close any existing capture session.
     closeCaptureSession();
@@ -311,13 +311,8 @@ public class Camera {
     Surface flutterSurface = new Surface(surfaceTexture);
     captureRequestBuilder.addTarget(flutterSurface);
 
-    List<Surface> remainingSurfaces = Arrays.asList(surfaces);
-    if (templateType != CameraDevice.TEMPLATE_PREVIEW) {
-      // If it is not preview mode, add all surfaces as targets.
-      for (Surface surface : remainingSurfaces) {
-        captureRequestBuilder.addTarget(surface);
-      }
-    }
+    if(targetSurface != null)
+      captureRequestBuilder.addTarget(targetSurface);
 
     // Prepare the callback
     CameraCaptureSession.StateCallback callback =
@@ -360,7 +355,10 @@ public class Camera {
     // Collect all surfaces we want to render to.
     List<Surface> surfaceList = new ArrayList<>();
     surfaceList.add(flutterSurface);
-    surfaceList.addAll(remainingSurfaces);
+    if(targetSurface != null)
+      surfaceList.add(targetSurface);
+    if(otherSurface != null)
+      surfaceList.add(otherSurface);
     // Start the session
     cameraDevice.createCaptureSession(surfaceList, callback, null);
   }
@@ -374,7 +372,7 @@ public class Camera {
       prepareMediaRecorder(filePath);
       recordingVideo = true;
       createCaptureSession(result, null,
-          CameraDevice.TEMPLATE_RECORD, () -> mediaRecorder.start(), mediaRecorder.getSurface());
+          CameraDevice.TEMPLATE_RECORD, () -> mediaRecorder.start(), mediaRecorder.getSurface(), null);
       result.success(null);
     } catch (CameraAccessException | IOException e) {
       result.error("videoRecordingFailed", e.getMessage(), null);
@@ -443,12 +441,12 @@ public class Camera {
   public void startPreview(final Result result, final Map<String, Object> resultSuccess) throws CameraAccessException {
     barcodeScanner.stop();
 
-    createCaptureSession(result, resultSuccess, CameraDevice.TEMPLATE_PREVIEW, pictureImageReader.getSurface());
+    createCaptureSession(result, resultSuccess, CameraDevice.TEMPLATE_PREVIEW, null, pictureImageReader.getSurface());
   }
 
   public void startPreviewWithImageStream(EventChannel imageStreamChannel, final Result result)
       throws CameraAccessException {
-    createCaptureSession(result, null, CameraDevice.TEMPLATE_RECORD, imageStreamReader.getSurface());
+    createCaptureSession(result, null, CameraDevice.TEMPLATE_RECORD, imageStreamReader.getSurface(), null);
 
     imageStreamChannel.setStreamHandler(
         new EventChannel.StreamHandler() {
@@ -500,7 +498,7 @@ public class Camera {
   public void startPreviewWithBarcodeScanning(EventChannel barcodeScannerChannel, final Result result)
      throws CameraAccessException {
 
-    createCaptureSession(result, null, CameraDevice.TEMPLATE_RECORD, barcodeScanningReader.getSurface(), pictureImageReader.getSurface());
+    createCaptureSession(result, null, CameraDevice.TEMPLATE_PREVIEW, barcodeScanningReader.getSurface(), pictureImageReader.getSurface());
 
     barcodeScanner.start();
     barcodeScannerChannel.setStreamHandler(
