@@ -135,6 +135,9 @@ public class BarcodeScanner {
     }
 
     synchronized (stateLock) {
+      if(state != State.Running)
+        return;
+
       pending = false;
       pendingImage.timestamp = SystemClock.elapsedRealtime();
       pendingImage.frameRotation = frameRotation;
@@ -160,22 +163,30 @@ public class BarcodeScanner {
 
       do {
         synchronized(stateLock) {
-          while((!pending && state == State.Running) || (state == State.Paused)) {
-            try { stateLock.wait(); }
+
+          if(requestedState != null) {
+            state = requestedState;
+            requestedState = null;
+            stateLock.notifyAll();
+          }
+
+          while(((!pending && state == State.Running) || (state == State.Paused)) && requestedState == null) {
+            try {
+              stateLock.wait();
+            }
             catch (InterruptedException ie) {
-              Log.e("BarcodeScanner.Worker", "Thread interrupted.", ie);
               state = State.Stopped;
             }
 
-            if(requestedState != null) {
-              state = requestedState;
-              requestedState = null;
-              stateLock.notifyAll();
-            }
           }
 
-          if(state == State.Stopped)
+          if(state == State.Stopped) {
             continue; // Will break in a minute
+          }
+
+          if(!pending || requestedState != null) {
+            continue; // State change.
+          }
 
           // Swap
           BarcodeImage tempImage = processingImage;
