@@ -241,6 +241,7 @@ static ResolutionPreset getResolutionPresetForString(NSString *preset) {
 @property(assign, nonatomic) BOOL isAudioSetup;
 @property(assign, nonatomic) BOOL isStreamingImages;
 @property(assign, nonatomic) BOOL isScanningBarcodes;
+@property(assign, nonatomic) BOOL isScanningBarcodesPaused;
 @property(strong, nonatomic) NSMutableArray<BarcodePair*>* activeBarcodes;
 @property(assign, nonatomic) ResolutionPreset resolutionPreset;
 @property(assign, nonatomic) CMTime lastVideoSampleTime;
@@ -559,7 +560,6 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
 -(void)enableBarcodeScanning {
   if([_captureSession canAddOutput:_captureMetadataOutput]) {
     [_captureSession addOutput:_captureMetadataOutput];
-    NSArray<AVMetadataObjectType>* types = [_captureMetadataOutput availableMetadataObjectTypes];
     
     [_captureMetadataOutput setMetadataObjectsDelegate:self queue:_captureMetadataQueue];
     [_captureMetadataOutput setMetadataObjectTypes:[NSArray arrayWithObject:AVMetadataObjectTypeQRCode]];
@@ -573,6 +573,9 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
 #pragma mark - AVCaptureMetadataOutputObjectsDelegate
 
 -(void)captureOutput:(AVCaptureOutput *)output didOutputMetadataObjects:(NSArray<__kindof AVMetadataObject *> *)metadataObjects fromConnection:(AVCaptureConnection *)connection{
+  if(_isScanningBarcodesPaused)
+    return;
+  
   if(_barcodeScanningHandler == nil || _barcodeScanningHandler.eventSink == nil)
     return;
   
@@ -800,9 +803,34 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
     
     [self enableBarcodeScanning];
     _isScanningBarcodes = YES;
+    _isScanningBarcodesPaused = NO;
   } else {
     _eventSink(
         @{@"event" : @"error", @"errorDescription" : @"Camera already scanning barcodes!"});
+  }
+}
+
+- (void)pauseBarcodeScanning {
+  if(!_isScanningBarcodes) {
+    _eventSink(
+        @{@"event" : @"error", @"errorDescription" : @"Camera not scanning barcodes!"});
+  } else if(_isScanningBarcodesPaused) {
+    _eventSink(
+        @{@"event" : @"error", @"errorDescription" : @"Camera barcode scanning already paused!"});
+  } else {
+    _isScanningBarcodesPaused = YES;
+  }
+}
+
+- (void)resumeBarcodeScanning {
+  if(!_isScanningBarcodes) {
+    _eventSink(
+        @{@"event" : @"error", @"errorDescription" : @"Camera not scanning barcodes!"});
+  } else if(!_isScanningBarcodesPaused) {
+    _eventSink(
+        @{@"event" : @"error", @"errorDescription" : @"Camera barcode scanning not paused!"});
+  } else {
+    _isScanningBarcodesPaused = NO;
   }
 }
 
@@ -1021,6 +1049,12 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
     result(nil);
   } else if ([@"startBarcodeScanning" isEqualToString:call.method]) {
     [_camera startBarcodeScanningWithMessenger:_messenger];
+    result(nil);
+  } else if ([@"pauseBarcodeScanning" isEqualToString:call.method]) {
+    [_camera pauseBarcodeScanning];
+    result(nil);
+  } else if ([@"resumeBarcodeScanning" isEqualToString:call.method]) {
+    [_camera resumeBarcodeScanning];
     result(nil);
   } else if ([@"stopBarcodeScanning" isEqualToString:call.method]) {
     [_camera stopBarcodeScanning];
