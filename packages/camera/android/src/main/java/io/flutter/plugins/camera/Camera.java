@@ -324,8 +324,10 @@ public class Camera {
                 dartMessenger.send(
                     DartMessenger.EventType.ERROR, "The camera was closed during configuration.");
 
-                if(result != null)
+                if(result != null) {
                   result.error("createCaptureSession", "no camera device", null);
+                  return;
+                }
               }
               cameraCaptureSession = session;
               captureRequestBuilder.set(
@@ -335,13 +337,17 @@ public class Camera {
                 onSuccessCallback.run();
               }
 
-              if(result != null)
+              if(result != null) {
                 result.success(resultSuccess);
+                return;
+              }
             } catch (CameraAccessException | IllegalStateException | IllegalArgumentException e) {
               dartMessenger.send(DartMessenger.EventType.ERROR, e.getMessage());
 
-              if(result != null)
+              if(result != null) {
                 result.error("createCaptureSession", e.getMessage(), null);
+                return;
+              }
             }
           }
 
