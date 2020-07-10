@@ -452,6 +452,11 @@ public class Camera {
 
   public void startPreviewWithImageStream(EventChannel imageStreamChannel, final Result result)
       throws CameraAccessException {
+    if(imageStreamReader == null) {
+      result.error("imageStreamReader null", "imageStreamReader null in startPreviewWithImageStream likely because camera is closed", null);
+      return;
+    }
+
     createCaptureSession(result, null, CameraDevice.TEMPLATE_RECORD, imageStreamReader.getSurface(), null);
 
     imageStreamChannel.setStreamHandler(
@@ -463,12 +468,18 @@ public class Camera {
 
           @Override
           public void onCancel(Object o) {
-            imageStreamReader.setOnImageAvailableListener(null, null);
+            if(imageStreamReader != null)
+              imageStreamReader.setOnImageAvailableListener(null, null);
           }
         });
   }
 
   private void setImageStreamImageAvailableListener(final EventChannel.EventSink imageStreamSink) {
+    if(imageStreamReader == null) {
+      imageStreamSink.error("imageStreamReader null", "imageStreamReader null on setImageStreamImageAvailableListener likely due to rapid camera.open/close", null);
+      return;
+    }
+
     imageStreamReader.setOnImageAvailableListener(
         reader -> {
           Image img = reader.acquireLatestImage();
@@ -504,6 +515,11 @@ public class Camera {
   public void startPreviewWithBarcodeScanning(EventChannel barcodeScannerChannel, final Result result)
      throws CameraAccessException {
 
+    if(barcodeScanningReader == null) {
+      result.error("barcodeScanningReader null", "barcodeScanningReader null in startPreviewWithBarcodeScanning likely because camera is closed", null);
+      return;
+    }
+
     createCaptureSession(result, null, CameraDevice.TEMPLATE_PREVIEW, barcodeScanningReader.getSurface(), pictureImageReader.getSurface());
 
     barcodeScanner.start();
@@ -516,7 +532,8 @@ public class Camera {
 
          @Override
          public void onCancel(Object o) {
-           barcodeScanningReader.setOnImageAvailableListener(null, null);
+           if(barcodeScanningReader != null)
+             barcodeScanningReader.setOnImageAvailableListener(null, null);
          }
        });
   }
@@ -530,6 +547,11 @@ public class Camera {
   }
 
   private void setBarcodeScanningImageAvailableListener(final EventChannel.EventSink barcodeScanningSink) {
+    if(barcodeScanningReader == null) {
+      barcodeScanningSink.error("barcodeScanningReader null", "barcodeScanningReader null on setBarcodeScanningImageAvailableListener likely due to rapid camera.open/close", null);
+      return;
+    }
+
     barcodeScanner.setSink(barcodeScanningSink);
     barcodeScanningReader.setOnImageAvailableListener(
        reader -> {

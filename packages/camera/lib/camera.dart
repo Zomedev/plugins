@@ -425,9 +425,13 @@ class CameraController extends ValueNotifier<CameraValue> {
         EventChannel('plugins.flutter.io/camera/imageStream');
     _imageStreamSubscription =
         cameraEventChannel.receiveBroadcastStream().listen(
-      (dynamic imageData) {
-        onAvailable(CameraImage._fromPlatformData(imageData));
-      },
+            (dynamic imageData) {
+              onAvailable(CameraImage._fromPlatformData(imageData));
+            },
+            onError: (PlatformException error) {
+              print('Camera:ImageStream error: ' + toString());
+            },
+            cancelOnError: true
     );
   }
 
@@ -521,9 +525,13 @@ class CameraController extends ValueNotifier<CameraValue> {
     EventChannel('plugins.flutter.io/camera/barcodeScanning');
     _barcodeScanningSubscription =
         cameraEventChannel.receiveBroadcastStream().listen(
-              (dynamic barcodeData) {
-            onAvailable(BarcodeScan._fromPlatformData(barcodeData));
-          },
+            (dynamic barcodeData) {
+              onAvailable(BarcodeScan._fromPlatformData(barcodeData));
+            },
+            onError: (error) {
+              print('Camera:BarcodeScanning error: ' + error.toString());
+            },
+            cancelOnError: true
         );
   }
 
