@@ -48,6 +48,7 @@ public class Camera {
   private final OrientationEventListener orientationEventListener;
   private final boolean isFrontFacing;
   private final int sensorOrientation;
+  private final boolean hasFlashSupport;
   private final String cameraName;
   private final Size captureSize;
   private final Size previewSize;
@@ -112,11 +113,10 @@ public class Camera {
     //noinspection ConstantConditions
     sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
     //noinspection ConstantConditions
-    isFrontFacing =
-        characteristics.get(CameraCharacteristics.LENS_FACING) == CameraMetadata.LENS_FACING_FRONT;
+    isFrontFacing = characteristics.get(CameraCharacteristics.LENS_FACING) == CameraMetadata.LENS_FACING_FRONT;
+    hasFlashSupport = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) != null;
     ResolutionPreset preset = ResolutionPreset.valueOf(resolutionPreset);
-    recordingProfile =
-        CameraUtils.getBestAvailableCamcorderProfileForResolutionPreset(cameraName, preset);
+    recordingProfile = CameraUtils.getBestAvailableCamcorderProfileForResolutionPreset(cameraName, preset);
     captureSize = new Size(recordingProfile.videoFrameWidth, recordingProfile.videoFrameHeight);
     previewSize = computeBestPreviewSize(cameraName, preset);
 
@@ -235,7 +235,7 @@ public class Camera {
     return flutterTexture;
   }
 
-  public void takePicture(String filePath, @NonNull final Result result) {
+  public void takePicture(String filePath, boolean useFlash, @NonNull final Result result) {
     final File file = new File(filePath);
 
     if (file.exists()) {
@@ -261,6 +261,10 @@ public class Camera {
           cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
       captureBuilder.addTarget(pictureImageReader.getSurface());
       captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, getMediaOrientation());
+
+      if(hasFlashSupport && useFlash) {
+        captureBuilder.set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_SINGLE);
+      }
 
       cameraCaptureSession.capture(
           captureBuilder.build(),
@@ -330,8 +334,8 @@ public class Camera {
                 }
               }
               cameraCaptureSession = session;
-              captureRequestBuilder.set(
-                  CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+              captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+
               cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, null);
               if (onSuccessCallback != null) {
                 onSuccessCallback.run();
