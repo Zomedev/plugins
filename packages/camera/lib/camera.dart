@@ -288,6 +288,9 @@ class CameraController extends ValueNotifier<CameraValue> {
           'enableAudio': enableAudio,
         },
       );
+      if (_isDisposed) {
+        return Future<void>.value();
+      }
       _textureId = reply['textureId'];
       value = value.copyWith(
         isInitialized: true,
@@ -517,6 +520,8 @@ class CameraController extends ValueNotifier<CameraValue> {
 
     try {
       await _channel.invokeMethod<void>('startBarcodeScanning');
+      if(_isDisposed)
+        return;
       value = value.copyWith(isScanningBarcodes: true);
     } on PlatformException catch (e) {
       throw CameraException(e.code, e.message);

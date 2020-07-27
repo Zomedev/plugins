@@ -970,7 +970,9 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
 
 - (void)handleMethodCall:(FlutterMethodCall *)call result:(FlutterResult)result {
   if (_dispatchQueue == nil) {
-    _dispatchQueue = dispatch_queue_create("io.flutter.camera.dispatchqueue", NULL);
+    @synchronized (self) {
+      _dispatchQueue = dispatch_queue_create("io.flutter.camera.dispatchqueue", NULL);
+    }
   }
 
   // Invoke the plugin on another dispatch queue to avoid blocking the UI.
@@ -980,6 +982,8 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
 }
 
 - (void)handleMethodCallAsync:(FlutterMethodCall *)call result:(FlutterResult)result {
+
+  // Camera-less calls
   if ([@"availableCameras" isEqualToString:call.method]) {
     AVCaptureDeviceDiscoverySession *discoverySession = [AVCaptureDeviceDiscoverySession
         discoverySessionWithDeviceTypes:@[ AVCaptureDeviceTypeBuiltInWideAngleCamera ]
@@ -1008,6 +1012,8 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
       }];
     }
     result(reply);
+
+    return;
   } else if ([@"initialize" isEqualToString:call.method]) {
     NSString *cameraName = call.arguments[@"cameraName"];
     NSString *resolutionPreset = call.arguments[@"resolutionPreset"];
@@ -1023,6 +1029,7 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
     } else {
       if (_camera) {
         [_camera close];
+        _camera = nil;
       }
       int64_t textureId = [_registry registerTexture:cam];
       _camera = cam;
@@ -1045,6 +1052,13 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
       });
       [cam start];
     }
+
+    return;
+  }
+
+  // Calls that expect a camera.
+  if(_camera == nil) {
+    result([FlutterError errorWithCode:@"StateError" message:@"Attempt to access disposed camera." details:nil]);
   } else if ([@"startImageStream" isEqualToString:call.method]) {
     [_camera startImageStreamWithMessenger:_messenger];
     result(nil);
@@ -1078,6 +1092,7 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
     } else if ([@"dispose" isEqualToString:call.method]) {
       [_registry unregisterTexture:textureId];
       [_camera close];
+      _camera = nil;
       _dispatchQueue = nil;
       result(nil);
     } else if ([@"prepareForVideoRecording" isEqualToString:call.method]) {
