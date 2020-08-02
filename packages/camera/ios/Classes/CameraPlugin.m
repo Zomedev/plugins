@@ -228,6 +228,7 @@ static ResolutionPreset getResolutionPresetForString(NSString *preset) {
 @property(readonly) CVPixelBufferRef volatile latestPixelBuffer;
 @property(readonly, nonatomic) CGSize previewSize;
 @property(readonly, nonatomic) CGSize captureSize;
+@property(readonly, nonatomic) BOOL isFlashAvailable;
 @property(strong, nonatomic) AVAssetWriter *videoWriter;
 @property(strong, nonatomic) AVAssetWriterInput *videoWriterInput;
 @property(strong, nonatomic) AVAssetWriterInput *audioWriterInput;
@@ -314,6 +315,8 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
   [_captureSession addConnection:connection];
   _capturePhotoOutput = [AVCapturePhotoOutput new];
   [_capturePhotoOutput setHighResolutionCaptureEnabled:YES];
+  _isFlashAvailable = [_capturePhotoOutput.supportedFlashModes containsObject:@(AVCaptureFlashModeOn)];
+    
   [_captureSession addOutput:_capturePhotoOutput];
   _motionManager = [[CMMotionManager alloc] init];
   [_motionManager startAccelerometerUpdates];
@@ -339,7 +342,7 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
   if (_resolutionPreset == max) {
     [settings setHighResolutionPhotoEnabled:YES];
   }
-  if(useFlash) {
+  if (useFlash && _isFlashAvailable) {
     settings.flashMode = AVCaptureFlashModeOn;
   }
   
@@ -1086,9 +1089,10 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
   } else {
     NSDictionary *argsMap = call.arguments;
     NSUInteger textureId = ((NSNumber *)argsMap[@"textureId"]).unsignedIntegerValue;
+    bool useFlash = ((NSNumber *)argsMap[@"useFlash"]).boolValue;
 
     if ([@"takePicture" isEqualToString:call.method]) {
-      [_camera captureToFile:call.arguments[@"path"] useFlash:call.arguments[@"useFlash"] result:result];
+      [_camera captureToFile:call.arguments[@"path"] useFlash:useFlash result:result];
     } else if ([@"dispose" isEqualToString:call.method]) {
       [_registry unregisterTexture:textureId];
       [_camera close];
