@@ -173,6 +173,7 @@ public class Camera {
               reply.put("textureId", flutterTexture.id());
               reply.put("previewWidth", previewSize.getWidth());
               reply.put("previewHeight", previewSize.getHeight());
+              reply.put("hasFlash", hasFlashSupport);
 
               startPreview(result, reply);
             } catch (CameraAccessException e) {

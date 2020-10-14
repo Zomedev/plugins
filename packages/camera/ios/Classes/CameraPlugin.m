@@ -1052,6 +1052,7 @@ FourCharCode const videoFormat = kCVPixelFormatType_32BGRA;
         @"previewHeight" : @(cam.previewSize.height),
         @"captureWidth" : @(cam.captureSize.width),
         @"captureHeight" : @(cam.captureSize.height),
+        @"hasFlash" : @(cam.isFlashAvailable),
       });
       [cam start];
     }

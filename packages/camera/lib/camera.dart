@@ -270,6 +270,9 @@ class CameraController extends ValueNotifier<CameraValue> {
   StreamSubscription<dynamic> _barcodeScanningSubscription;
   Completer<void> _creatingCompleter;
 
+  bool _hasFlash = false;
+  get hasFlash => _hasFlash;
+
   /// Initializes the camera on the device.
   ///
   /// Throws a [CameraException] if the initialization fails.
@@ -299,6 +302,7 @@ class CameraController extends ValueNotifier<CameraValue> {
           reply['previewHeight'].toDouble(),
         ),
       );
+      _hasFlash = reply['hasFlash'] as bool;
     } on PlatformException catch (e) {
       throw CameraException(e.code, e.message);
     }
