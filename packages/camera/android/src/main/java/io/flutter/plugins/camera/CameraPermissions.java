@@ -29,6 +29,7 @@ final class CameraPermissions {
       ResultCallback callback) {
     if (ongoing) {
       callback.onResult("cameraPermission", "Camera permission request ongoing");
+      return;
     }
     if (!hasCameraPermission(activity) || (enableAudio && !hasAudioPermission(activity))) {
       permissionsRegistry.addListener(
