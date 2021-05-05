@@ -1,13 +1,18 @@
 package io.flutter.plugins.camera;
 
+import android.os.Handler;
 import android.text.TextUtils;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.EventChannel;
 import java.util.HashMap;
 import java.util.Map;
 
+import android.util.Log;
+
 class DartMessenger {
+  @NonNull private Handler handler;
   @Nullable private EventChannel.EventSink eventSink;
 
   enum EventType {
@@ -15,7 +20,8 @@ class DartMessenger {
     CAMERA_CLOSING,
   }
 
-  DartMessenger(BinaryMessenger messenger, long eventChannelId) {
+  DartMessenger(BinaryMessenger messenger, long eventChannelId, @NonNull Handler handler) {
+    this.handler = handler;
     new EventChannel(messenger, "flutter.io/cameraPlugin/cameraEvents" + eventChannelId)
         .setStreamHandler(
             new EventChannel.StreamHandler() {
@@ -46,6 +52,14 @@ class DartMessenger {
     if (eventType == EventType.ERROR && !TextUtils.isEmpty(description)) {
       event.put("errorDescription", description);
     }
-    eventSink.success(event);
+
+    handler.post(
+      new Runnable() {
+        @Override
+        public void run() {
+          eventSink.success(event);
+        }
+      }
+    );
   }
 }
