@@ -19,6 +19,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import android.util.Log;
+
 /** Provides various utilities for camera. */
 public final class CameraUtils {
 
@@ -65,9 +67,61 @@ public final class CameraUtils {
           details.put("lensFacing", "external");
           break;
       }
+
       cameras.add(details);
     }
     return cameras;
+  }
+
+  static int getHardwareLevel(Activity activity, String cameraName)throws CameraAccessException {
+    CameraManager cameraManager = (CameraManager) activity.getSystemService(Context.CAMERA_SERVICE);
+    CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraName);
+    return characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL);
+  }
+
+  static Size getRecordSize(String cameraName, ResolutionPreset preset) {
+    CamcorderProfile profile = getBestAvailableCamcorderProfileForResolutionPreset(cameraName, preset);
+    return new Size(profile.videoFrameWidth, profile.videoFrameHeight);
+  }
+
+  static Size getPreviewSize(Activity activity, String cameraName, ResolutionPreset preset) throws CameraAccessException {
+    CameraManager cameraManager = (CameraManager) activity.getSystemService(Context.CAMERA_SERVICE);
+    CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraName);
+    StreamConfigurationMap streamConfigurationMap = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+
+    int maximumSize = 1080; // Max
+    switch(preset) {
+      case low: maximumSize = 240;  break;
+      case medium: maximumSize = 480; break;
+      case high: maximumSize = 720; break;
+      // Spec says 1080 max so...
+      case veryHigh:
+      case ultraHigh:
+      case max:
+      default:
+        maximumSize = 1080;
+        break;
+    }
+
+    Size best = null;
+    for(Size outputSize : streamConfigurationMap.getOutputSizes(ImageFormat.PRIVATE)) {
+      if(outputSize.getHeight() > maximumSize)
+        continue;
+      if(best == null || best.getHeight() < outputSize.getHeight())
+        best = outputSize;
+    }
+
+    return best;
+  }
+
+  static Size getMaximumSize(Activity activity, String cameraName, int format) throws CameraAccessException {
+    CameraManager cameraManager = (CameraManager) activity.getSystemService(Context.CAMERA_SERVICE);
+    CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraName);
+    StreamConfigurationMap streamConfigurationMap = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+
+    return Collections.max(
+            Arrays.asList(streamConfigurationMap.getOutputSizes(format)),
+            new CompareSizesByArea());
   }
 
   static CamcorderProfile getBestAvailableCamcorderProfileForResolutionPreset(

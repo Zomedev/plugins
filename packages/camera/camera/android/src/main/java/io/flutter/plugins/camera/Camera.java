@@ -63,6 +63,12 @@ public class Camera {
   private final Size previewSize;
   private final boolean enableAudio;
 
+  // Sizes based more closely on https://developer.android.com/reference/android/hardware/camera2/CameraDevice#createCaptureSession(android.hardware.camera2.params.SessionConfiguration)
+  // Note we can have up to 3 targets
+  private final Size flutterSurfaceSize;
+  private final Size pictureReaderSize;
+  private final Size barcodeReaderSize;
+
   private CameraDevice cameraDevice;
   private CameraCaptureSession cameraCaptureSession;
   private ImageReader pictureImageReader;
@@ -115,6 +121,25 @@ public class Camera {
         };
     orientationEventListener.enable();
 
+    ResolutionPreset preset = ResolutionPreset.valueOf(resolutionPreset);
+
+    int cameraHardwareLevel = CameraUtils.getHardwareLevel(activity, cameraName);
+    Size cameraPreviewSize = CameraUtils.getPreviewSize(activity, cameraName, preset);
+    Size cameraRecordSize = CameraUtils.getRecordSize(cameraName, preset);
+    Size cameraMaximumSize = CameraUtils.getMaximumSize(activity, cameraName, ImageFormat.JPEG);
+    switch(cameraHardwareLevel) {
+      case CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_3:
+      case CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_FULL:
+      case CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED:
+      case CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY:
+      default:
+        // We effective use PRIV, YUV, JPEG, so legacy matched
+        flutterSurfaceSize = cameraPreviewSize;
+        barcodeReaderSize = cameraPreviewSize;
+        pictureReaderSize = cameraRecordSize; // Could be maximum, clamped by resolution...
+        break;
+    }
+
     CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraName);
     StreamConfigurationMap streamConfigurationMap =
         characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
@@ -123,7 +148,6 @@ public class Camera {
     //noinspection ConstantConditions
     isFrontFacing = characteristics.get(CameraCharacteristics.LENS_FACING) == CameraMetadata.LENS_FACING_FRONT;
     hasFlashSupport = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) != null;
-    ResolutionPreset preset = ResolutionPreset.valueOf(resolutionPreset);
     recordingProfile = CameraUtils.getBestAvailableCamcorderProfileForResolutionPreset(cameraName, preset);
     captureSize = new Size(recordingProfile.videoFrameWidth, recordingProfile.videoFrameHeight);
     previewSize = computeBestPreviewSize(cameraName, preset);
@@ -147,17 +171,17 @@ public class Camera {
   public void open(@NonNull final Result result) throws CameraAccessException {
     pictureImageReader =
         ImageReader.newInstance(
-            captureSize.getWidth(), captureSize.getHeight(), ImageFormat.JPEG, 2);
+            pictureReaderSize.getWidth(), pictureReaderSize.getHeight(), ImageFormat.JPEG, 2);
 
     // Used to steam image byte data to dart side.
     imageStreamReader =
         ImageReader.newInstance(
-            previewSize.getWidth(), previewSize.getHeight(), ImageFormat.YUV_420_888, 2);
+            barcodeReaderSize.getWidth(), barcodeReaderSize.getHeight(), ImageFormat.YUV_420_888, 2);
 
     // Use to scan for barcodes
     barcodeScanningReader =
        ImageReader.newInstance(
-          previewSize.getWidth(), previewSize.getHeight(), ImageFormat.YUV_420_888, 2);
+           barcodeReaderSize.getWidth(), barcodeReaderSize.getHeight(), ImageFormat.YUV_420_888, 2);
 
     cameraManager.openCamera(
         cameraName,
@@ -168,8 +192,8 @@ public class Camera {
             try {
               Map<String, Object> reply = new HashMap<>();
               reply.put("textureId", flutterTexture.id());
-              reply.put("previewWidth", previewSize.getWidth());
-              reply.put("previewHeight", previewSize.getHeight());
+              reply.put("previewWidth", flutterSurfaceSize.getWidth());
+              reply.put("previewHeight", flutterSurfaceSize.getHeight());
               reply.put("hasFlash", hasFlashSupport);
 
               startPreview(result, reply);
@@ -327,7 +351,7 @@ public class Camera {
 
     // Build Flutter surface to render to
     SurfaceTexture surfaceTexture = flutterTexture.surfaceTexture();
-    surfaceTexture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
+    surfaceTexture.setDefaultBufferSize(flutterSurfaceSize.getWidth(), flutterSurfaceSize.getHeight());
     Surface flutterSurface = new Surface(surfaceTexture);
     captureRequestBuilder.addTarget(flutterSurface);
 
