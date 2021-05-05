@@ -57,7 +57,8 @@ class DartMessenger {
       new Runnable() {
         @Override
         public void run() {
-          eventSink.success(event);
+          if(eventSink != null)
+            eventSink.success(event);
         }
       }
     );
