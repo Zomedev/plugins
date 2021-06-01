@@ -135,7 +135,7 @@ public class Camera {
       default:
         // We effective use PRIV, YUV, JPEG, so legacy matched
         flutterSurfaceSize = cameraPreviewSize;
-        barcodeReaderSize = cameraPreviewSize;
+        barcodeReaderSize = cameraRecordSize;
         pictureReaderSize = cameraRecordSize; // Could be maximum, clamped by resolution...
         break;
     }
